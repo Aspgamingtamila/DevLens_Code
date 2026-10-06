@@ -94,8 +94,9 @@ sequenceDiagram
 
 1. **Static Analysis Only**: No user code is ever executed with `exec`, `eval`, or dynamic compilation on the host machine.
 2. **Resource-Bounded Parsing**:
-   - Python parsing uses `ast.parse()` with a recursion limit.
-   - JavaScript/TypeScript parsing uses regex and token-based syntactic analysis.
-   - C/C++ and Java use lexical and AST pattern matching.
+   - Python uses the built-in compiler `compile()` to parse source without executing it.
+   - JavaScript uses Node.js `--check`; TypeScript uses `tsc --noEmit`; C/C++ use GCC/G++ with `-fsyntax-only`; Java uses `javac` with annotation processing disabled. These checks report compiler errors and available warnings without running the submitted program.
+   - Compiler subprocesses have a short timeout, run in temporary working directories, and do not run generated binaries. If a compiler is unavailable, the UI must label results as incomplete rather than suggesting that the program is error-free.
+   - GitHub Pages/browser-only fallback checks are intentionally limited and display a compiler-unavailable notice; full diagnostics require the Docker Compose backend and its language toolchains.
 3. **Future Sandboxed MicroVM Architecture (v2)**:
    - Any future dynamic execution (e.g. running generated tests) must run in isolated gVisor/Firecracker microVMs with `--net=none`, read-only filesystems, and strict CPU/RAM limits.

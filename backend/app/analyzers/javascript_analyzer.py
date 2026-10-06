@@ -1,6 +1,8 @@
 """JavaScript and TypeScript Deterministic Static Analyzer."""
 
 import re
+import shutil
+import subprocess
 from typing import List, Tuple
 
 from .base import BaseAnalyzer
@@ -18,6 +20,57 @@ class JavaScriptAnalyzer(BaseAnalyzer):
 
     def analyze(self, code: str) -> Tuple[List[FindingSchema], AnalysisMetricSchema, str, str]:
         findings: List[FindingSchema] = []
+        node_path = shutil.which("node") if self._language == "javascript" else None
+        if node_path:
+            try:
+                syntax_check = subprocess.run(
+                    [node_path, "--check", "--input-type=module", "-"],
+                    input=code,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    check=False,
+                )
+                if syntax_check.returncode != 0:
+                    diagnostic = syntax_check.stderr
+                    line_match = re.search(r"^\[stdin\]:(\d+)$", diagnostic, re.MULTILINE)
+                    diagnostic_lines = diagnostic.splitlines()
+                    caret_line = next((line for line in diagnostic_lines if re.match(r"^\s*\^", line)), "")
+                    message_match = re.search(r"\nSyntaxError: (.+)", diagnostic)
+                    line_number = int(line_match.group(1)) if line_match else 1
+                    column_number = caret_line.find("^") + 1 if caret_line else 1
+                    message = message_match.group(1) if message_match else "Invalid JavaScript syntax"
+                    findings.append(
+                        FindingSchema(
+                            severity=SeverityEnum.CRITICAL,
+                            category=CategoryEnum.BUG,
+                            source=SourceEnum.STATIC,
+                            title=f"Syntax Error: {message}",
+                            explanation=f"The JavaScript parser reported a syntax error at line {line_number}, column {column_number}.",
+                            suggestion="Correct the reported syntax and analyze the code again.",
+                            line_start=line_number,
+                            line_end=line_number,
+                            column_start=column_number,
+                            column_end=column_number,
+                            rule_id="JS-SYNTAX-001",
+                            confidence=1.0,
+                        )
+                    )
+            except subprocess.TimeoutExpired:
+                findings.append(
+                    FindingSchema(
+                        severity=SeverityEnum.INFO,
+                        category=CategoryEnum.BUG,
+                        source=SourceEnum.STATIC,
+                        title="JavaScript syntax check timed out",
+                        explanation="The syntax parser did not finish within three seconds, so syntax could not be confirmed.",
+                        suggestion="Try a smaller code sample.",
+                        line_start=1,
+                        line_end=1,
+                        rule_id="JS-SYNTAX-TIMEOUT-001",
+                        confidence=1.0,
+                    )
+                )
         lines = code.splitlines()
         loc = len(lines)
         comment_lines = 0

@@ -25,6 +25,7 @@ import { AuthModal } from './components/AuthModal';
 import { SAMPLE_SNIPPETS } from './components/sampleCodes';
 import { Analysis, SupportedLanguage, User } from './types';
 import { api } from './services/api';
+import * as ts from 'typescript';
 
 export function App() {
   const [currentNav, setCurrentNav] = useState<'analyzer' | 'history' | 'docs' | 'settings'>('analyzer');
@@ -60,6 +61,23 @@ export function App() {
     setIsLoading(true);
     setAnalysisError(null);
     try {
+      if (language === 'typescript') {
+        const syntaxError = ts.transpileModule(code, {
+          fileName: 'snippet.ts',
+          reportDiagnostics: true,
+          compilerOptions: { target: ts.ScriptTarget.Latest },
+        }).diagnostics?.find((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
+        if (syntaxError) {
+          const position = syntaxError.file?.getLineAndCharacterOfPosition(syntaxError.start ?? 0);
+          const message = ts.flattenDiagnosticMessageText(syntaxError.messageText, '\n');
+          setAnalysis(null);
+          setAnalysisError(
+            `Syntax error at line ${(position?.line ?? 0) + 1}, column ${(position?.character ?? 0) + 1}: ${message}`
+          );
+          return;
+        }
+      }
+
       const result = await api.analyzeCode(
         code,
         language,
@@ -67,7 +85,11 @@ export function App() {
         enableAi
       );
       setAnalysis(result);
-      setActiveAnalysisTab('overview');
+      setActiveAnalysisTab(
+        result.findings.some((finding) => finding.rule_id?.includes('SYNTAX') || finding.rule_id?.includes('COMPILER'))
+          ? 'bugs'
+          : 'overview'
+      );
     } catch (err: any) {
       setAnalysisError(err.message || 'Analysis pipeline encountered an error');
     } finally {
@@ -130,10 +152,10 @@ export function App() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100">
-                  DevLens Code Intelligence Workbench
+                  Code analyzer
                 </h1>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  Deterministic AST Linting • CWE Vulnerability Analysis • Big-O Complexity • Test Synthesis
+                <p className="text-sm text-slate-400 mt-1">
+                  Check your code for errors and get practical suggestions.
                 </p>
               </div>
 
@@ -317,8 +339,8 @@ export function App() {
       {/* Global Footer */}
       <footer className="border-t border-slate-800 bg-slate-950 py-4 text-center text-xs text-slate-500 font-mono">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
-          <span>DevLens v1.0 • Designed with security best practices and continuously tested for common vulnerabilities.</span>
-          <span>Zero Arbitrary Host Execution Guarantee</span>
+          <span>DevLens · Clear feedback for better code</span>
+          <span>Your code is analyzed, never run</span>
         </div>
       </footer>
 

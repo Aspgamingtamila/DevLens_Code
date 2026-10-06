@@ -223,8 +223,8 @@ class PythonAnalyzer(BaseAnalyzer):
                     suggestion="Verify indentation, colons, brackets, and syntax correctness.",
                     line_start=e.lineno or 1,
                     line_end=e.lineno or 1,
-                    column_start=e.offset,
-                    column_end=e.offset,
+                    column_start=max(1, e.offset or 1),
+                    column_end=max(1, e.offset or 1),
                     rule_id="PY-SYNTAX-001",
                     confidence=1.0,
                 )

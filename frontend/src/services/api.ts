@@ -356,6 +356,20 @@ class ApiService {
     const loc = lines.length;
     const findings: Finding[] = [];
 
+    findings.push({
+      id: 'client-compiler-unavailable',
+      severity: 'info',
+      category: 'bug',
+      source: 'static',
+      title: 'Full compiler diagnostics unavailable in browser-only mode',
+      explanation: 'This browser fallback can catch selected common mistakes, but it cannot run the language compilers. A clean result here does not mean the program is error-free.',
+      suggestion: 'Run DevLens with its Docker Compose backend for compile-only diagnostics across the supported languages.',
+      line_start: 1,
+      line_end: 1,
+      rule_id: 'CLIENT-COMPILER-UNAVAILABLE',
+      confidence: 1,
+    });
+
     // Count branch keywords for cyclomatic complexity
     const branchKeywords = ['if ', 'elif ', 'else if', 'for ', 'while ', 'case ', 'catch ', '&&', '||'];
     let branches = 1;
@@ -493,6 +507,162 @@ class ApiService {
       }
     });
 
+    if (language === 'c' || language === 'cpp') {
+      const addCFinding = (
+        ruleId: string,
+        title: string,
+        explanation: string,
+        suggestion: string,
+        line: number,
+        column: number,
+        severity: Finding['severity'] = 'high'
+      ) => {
+        findings.push({
+          id: `static-${ruleId}-${line}`,
+          severity,
+          category: 'bug',
+          source: 'static',
+          title,
+          explanation,
+          suggestion,
+          line_start: line,
+          line_end: line,
+          column_start: column,
+          column_end: column,
+          rule_id: ruleId,
+          confidence: 0.95,
+        });
+      };
+
+      const locationFor = (offset: number) => {
+        const precedingText = code.slice(0, offset);
+        const line = precedingText.split('\n').length;
+        const column = offset - precedingText.lastIndexOf('\n');
+        return { line, column };
+      };
+
+      const includePattern = /^\s*#\s*include\s*[<"]([^>"]+)[>"]/gm;
+      for (const match of code.matchAll(includePattern)) {
+        const header = match[1];
+        if (/\b(?:stdio|stdlib|string|stdint|stdbool|stddef|time|math|ctype|errno|assert|limits|float|signal|locale|wchar|wctype),h\b/i.test(header)) {
+          const location = locationFor(match.index ?? 0);
+          addCFinding(
+            'C-SYNTAX-001',
+            `Malformed standard header name: <${header}>`,
+            `The standard header name is malformed, so the compiler cannot find the header.`,
+            'Use the correct header spelling, such as #include <stdio.h>.',
+            location.line,
+            location.column,
+            'critical'
+          );
+        }
+      }
+
+      const mainDeclaration = /^\s*(?:void|int)\s+main\s*\([^;{}]*\)\s*;/m.exec(code);
+      const hasMainDefinition = /\b(?:void|int)\s+main\s*\([^;{}]*\)\s*\{/m.test(code);
+      const hasFunctionDefinition = /\b(?:void|char|short|int|long|float|double|_Bool|bool)\s+[A-Za-z_]\w*\s*\([^;{}]*\)\s*\{/m.test(code);
+
+      if (/\bvoid\s+main\s*\(/.test(code)) {
+        const offset = code.search(/\bvoid\s+main\s*\(/);
+        const location = locationFor(offset);
+        addCFinding(
+          'C-BUG-MAIN-001',
+          'Non-standard return type for main()',
+          'A hosted C program expects main() to return int; void main() is not standard C.',
+          'Declare the entry point as int main(void) and return an integer status.',
+          location.line,
+          location.column,
+          'medium'
+        );
+      }
+
+      if (mainDeclaration && !hasMainDefinition) {
+        const location = locationFor(mainDeclaration.index);
+        addCFinding(
+          'C-SYNTAX-002',
+          'main() is declared but never defined',
+          'This line is only a function declaration. The following standalone block is not the body of main().',
+          'Remove the semicolon after the main() signature and place the opening brace directly after the signature.',
+          location.line,
+          location.column,
+          'critical'
+        );
+
+        const standaloneBlock = /^\s*\{\s*$/m.exec(code.slice(mainDeclaration.index + mainDeclaration[0].length));
+        if (standaloneBlock) {
+          const blockOffset = mainDeclaration.index + mainDeclaration[0].length + standaloneBlock.index;
+          const blockLocation = locationFor(blockOffset);
+          addCFinding(
+            'C-SYNTAX-003',
+            'Unexpected block outside a function',
+            'A brace block at file scope cannot contain C statements. It looks like this block was intended to be main()’s body.',
+            'Move the opening brace before the statements and remove the semicolon from the main() definition.',
+            blockLocation.line,
+            blockLocation.column,
+            'critical'
+          );
+        }
+      }
+
+      if (!hasFunctionDefinition && mainDeclaration) {
+        for (const match of code.matchAll(/\breturn\b/g)) {
+          const location = locationFor(match.index ?? 0);
+          addCFinding(
+            'C-SYNTAX-004',
+            'return used outside a function',
+            'C return statements must appear inside a function body; this block is at file scope.',
+            'Put the statements inside the main() function body.',
+            location.line,
+            location.column,
+            'critical'
+          );
+        }
+      }
+
+      if (language === 'c') {
+        const declarations = new Map<string, { pointer: boolean; line: number }>();
+        const declarationPattern = /\b(?:int|float|double|_Bool|bool)\s+(\*+\s*)?([A-Za-z_]\w*)\s*(?:=[^;\n]*)?;/g;
+        for (const match of code.matchAll(declarationPattern)) {
+          declarations.set(match[2], {
+            pointer: Boolean(match[1]),
+            line: locationFor(match.index ?? 0).line,
+          });
+        }
+
+        const stringAssignmentPattern = /\b([A-Za-z_]\w*)\s*=\s*"(?:\\.|[^"\\])*"/g;
+        for (const match of code.matchAll(stringAssignmentPattern)) {
+          const declaration = declarations.get(match[1]);
+          if (declaration && !declaration.pointer) {
+            const location = locationFor((match.index ?? 0) + match[0].indexOf(match[1]));
+            addCFinding(
+              'C-BUG-TYPE-001',
+              `String assigned to integer variable '${match[1]}'`,
+              `The variable '${match[1]}' is declared as an integer, but this assignment provides a string literal.`,
+              'Use a char array or a char pointer for text, or assign a numeric value to the integer.',
+              location.line,
+              location.column,
+              'critical'
+            );
+          }
+        }
+
+        const printCall = /\bprint\s*\(/.exec(code);
+        const printDeclaration = /\b(?:void|int|char|short|long|float|double)\s+print\s*\(/.test(code);
+        if (printCall && !printDeclaration) {
+          const location = locationFor(printCall.index);
+          addCFinding(
+            'C-BUG-UNDECLARED-001',
+            'Unknown function: print()',
+            'print() is not part of the C standard library and no declaration for it appears in this code.',
+            'Use printf() from <stdio.h>, or declare and define your own print() function.',
+            location.line,
+            location.column,
+            'high'
+          );
+        }
+      }
+    }
+
     // Compute composite 6-pillar score
     const criticalCount = findings.filter((f) => f.severity === 'critical').length;
     const highCount = findings.filter((f) => f.severity === 'high').length;
@@ -509,28 +679,29 @@ class ApiService {
 
     // Generate unit tests
     const generatedTests: GeneratedTest[] = [];
-    if (language === 'python') {
+    const hasSyntaxErrors = findings.some((finding) => finding.rule_id?.includes('SYNTAX') || finding.rule_id?.includes('COMPILER-UNAVAILABLE'));
+    if (!hasSyntaxErrors && language === 'python') {
       generatedTests.push({
         id: 'test-py-1',
         test_framework: 'pytest',
         test_code: `import pytest\n\ndef test_nominal_execution():\n    # Test normal input bounds\n    assert True\n\ndef test_edge_case_empty_input():\n    # Verify handling of empty or None arguments\n    with pytest.raises((ValueError, TypeError)):\n        pass\n`,
         explanation: 'Unit tests for boundary conditions and exception handling.',
       });
-    } else if (language === 'javascript' || language === 'typescript') {
+    } else if (!hasSyntaxErrors && (language === 'javascript' || language === 'typescript')) {
       generatedTests.push({
         id: 'test-js-1',
         test_framework: 'vitest',
         test_code: `import { describe, it, expect } from 'vitest';\n\ndescribe('Core Module Verification', () => {\n  it('handles standard input correctly', () => {\n    expect(true).toBe(true);\n  });\n\n  it('handles edge case inputs safely', () => {\n    // Verify boundary edge cases\n    expect(true).toBeDefined();\n  });\n});\n`,
         explanation: 'Vitest suite testing valid input bounds and null safety.',
       });
-    } else if (language === 'java') {
+    } else if (!hasSyntaxErrors && language === 'java') {
       generatedTests.push({
         id: 'test-java-1',
         test_framework: 'JUnit 5',
         test_code: `import org.junit.jupiter.api.Test;\nimport static org.junit.jupiter.api.Assertions.*;\n\npublic class ModuleTest {\n    @Test\n    void testValidInput() {\n        assertTrue(true);\n    }\n\n    @Test\n    void testExceptionHandling() {\n        assertDoesNotThrow(() -> {\n            // exercise execution\n        });\n    }\n}\n`,
         explanation: 'JUnit 5 test fixture covering validation and assertions.',
       });
-    } else {
+    } else if (!hasSyntaxErrors) {
       generatedTests.push({
         id: 'test-cpp-1',
         test_framework: 'GoogleTest',
@@ -544,8 +715,8 @@ class ApiService {
       title: title || `${language.toUpperCase()} Code Analysis`,
       language,
       code_snippet: code,
-      quality_score: Math.round(dqe),
-      summary: `Client-side static analysis evaluated ${loc} lines of ${language.toUpperCase()} code. Detected ${findings.length} issues across security, complexity, and maintainability. Theoretical asymptotic runtime is estimated at ${timeComplexity}.`,
+      quality_score: Math.min(59, Math.round(dqe)),
+      summary: `Browser-only checks evaluated ${loc} lines of ${language.toUpperCase()} code and detected ${findings.filter((finding) => finding.category === 'bug' && finding.severity !== 'info').length} code error(s). Full compiler diagnostics were not run, so this result cannot confirm that the program is error-free. Theoretical asymptotic runtime is estimated at ${timeComplexity}.`,
       time_complexity: timeComplexity,
       space_complexity: spaceComplexity,
       created_at: new Date().toISOString(),

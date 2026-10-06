@@ -50,8 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   v1.0
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono hidden sm:block">
-                Code Intelligence & Debugging
+              <p className="text-xs text-slate-400 hidden sm:block">
+                Code review, made clear
               </p>
             </div>
           </button>
@@ -91,7 +91,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              <span>Docs & Architecture</span>
+              <span>Guide</span>
             </button>
 
             <button
@@ -113,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Engine status indicator */}
           <div className="hidden lg:flex items-center space-x-2 px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs font-mono text-slate-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Deterministic + AI Synthesis</span>
+            <span>Ready for analysis</span>
           </div>
 
           {user ? (

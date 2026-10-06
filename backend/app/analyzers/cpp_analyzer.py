@@ -20,6 +20,127 @@ class CppAnalyzer(BaseAnalyzer):
         findings: List[FindingSchema] = []
         lines = code.splitlines()
         loc = len(lines)
+
+        if self._language in ("c", "cpp"):
+            def add_finding(rule_id: str, title: str, explanation: str, suggestion: str, line: int, severity: SeverityEnum = SeverityEnum.HIGH) -> None:
+                findings.append(
+                    FindingSchema(
+                        severity=severity,
+                        category=CategoryEnum.BUG,
+                        source=SourceEnum.STATIC,
+                        title=title,
+                        explanation=explanation,
+                        suggestion=suggestion,
+                        line_start=line,
+                        line_end=line,
+                        rule_id=rule_id,
+                        confidence=0.95,
+                    )
+                )
+
+            standard_header_typo = re.compile(
+                r"\b(?:stdio|stdlib|string|stdint|stdbool|stddef|time|math|ctype|errno|assert|limits|float|signal|locale|wchar|wctype),h\b",
+                re.IGNORECASE,
+            )
+            for line_number, line in enumerate(lines, start=1):
+                include = re.match(r"\s*#\s*include\s*[<\"]([^>\"]+)[>\"]", line)
+                if include and standard_header_typo.search(include.group(1)):
+                    header = include.group(1)
+                    add_finding(
+                        "C-SYNTAX-001",
+                        f"Malformed standard header name: <{header}>",
+                        "The standard header name is malformed, so the compiler cannot find the header.",
+                        "Use the correct header spelling, such as #include <stdio.h>.",
+                        line_number,
+                        SeverityEnum.CRITICAL,
+                    )
+
+            main_declaration = re.search(r"(?m)^\s*(?:void|int)\s+main\s*\([^;{}]*\)\s*;", code)
+            has_main_definition = re.search(r"\b(?:void|int)\s+main\s*\([^;{}]*\)\s*\{", code)
+            has_function_definition = re.search(
+                r"\b(?:void|char|short|int|long|float|double|_Bool|bool)\s+[A-Za-z_]\w*\s*\([^;{}]*\)\s*\{",
+                code,
+            )
+
+            void_main = re.search(r"\bvoid\s+main\s*\(", code)
+            if void_main:
+                line_number = code.count("\n", 0, void_main.start()) + 1
+                add_finding(
+                    "C-BUG-MAIN-001",
+                    "Non-standard return type for main()",
+                    "A hosted C or C++ program expects main() to return int; void main() is not standard.",
+                    "Declare the entry point as int main(void) and return an integer status.",
+                    line_number,
+                    SeverityEnum.MEDIUM,
+                )
+
+            if main_declaration and not has_main_definition:
+                line_number = code.count("\n", 0, main_declaration.start()) + 1
+                add_finding(
+                    "C-SYNTAX-002",
+                    "main() is declared but never defined",
+                    "This line is only a function declaration. The following standalone block is not the body of main().",
+                    "Remove the semicolon after the main() signature and place the opening brace directly after the signature.",
+                    line_number,
+                    SeverityEnum.CRITICAL,
+                )
+
+                block = re.search(r"(?m)^\s*\{\s*$", code[main_declaration.end():])
+                if block:
+                    line_number = code.count("\n", 0, main_declaration.end() + block.start()) + 1
+                    add_finding(
+                        "C-SYNTAX-003",
+                        "Unexpected block outside a function",
+                        "A brace block at file scope cannot contain C or C++ statements. It looks like this block was intended to be main()'s body.",
+                        "Move the opening brace before the statements and remove the semicolon from the main() definition.",
+                        line_number,
+                        SeverityEnum.CRITICAL,
+                    )
+
+            if main_declaration and not has_function_definition:
+                for match in re.finditer(r"\breturn\b", code):
+                    line_number = code.count("\n", 0, match.start()) + 1
+                    add_finding(
+                        "C-SYNTAX-004",
+                        "return used outside a function",
+                        "C and C++ return statements must appear inside a function body; this block is at file scope.",
+                        "Put the statements inside the main() function body.",
+                        line_number,
+                        SeverityEnum.CRITICAL,
+                    )
+
+            if self._language == "c":
+                declarations = {
+                    match.group(2): bool(match.group(1))
+                    for match in re.finditer(
+                        r"\b(?:int|float|double|_Bool|bool)\s+(\*+\s*)?([A-Za-z_]\w*)\s*(?:=[^;\n]*)?;",
+                        code,
+                    )
+                }
+                for match in re.finditer(r"\b([A-Za-z_]\w*)\s*=\s*\"(?:\\.|[^\"\\])*\"", code):
+                    if match.group(1) in declarations and not declarations[match.group(1)]:
+                        line_number = code.count("\n", 0, match.start()) + 1
+                        add_finding(
+                            "C-BUG-TYPE-001",
+                            f"String assigned to integer variable '{match.group(1)}'",
+                            f"The variable '{match.group(1)}' is declared as an integer, but this assignment provides a string literal.",
+                            "Use a char array or a char pointer for text, or assign a numeric value to the integer.",
+                            line_number,
+                            SeverityEnum.CRITICAL,
+                        )
+
+                print_call = re.search(r"\bprint\s*\(", code)
+                print_declaration = re.search(r"\b(?:void|int|char|short|long|float|double)\s+print\s*\(", code)
+                if print_call and not print_declaration:
+                    line_number = code.count("\n", 0, print_call.start()) + 1
+                    add_finding(
+                        "C-BUG-UNDECLARED-001",
+                        "Unknown function: print()",
+                        "print() is not part of the C standard library and no declaration for it appears in this code.",
+                        "Use printf() from <stdio.h>, or declare and define your own print() function.",
+                        line_number,
+                    )
+
         comment_lines = 0
         cyclomatic = 1
         max_loop_depth = 0
