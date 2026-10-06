@@ -235,6 +235,9 @@ Estimated Time Complexity: **{analysis.time_complexity}** | Space Complexity: **
 ## Detected Findings ({len(analysis.findings)})
 """
     for f in analysis.findings:
+        suggestion_section = (
+            f"**Remediation Suggestion:**\n{f.suggestion}" if f.suggestion else ""
+        )
         md_content += f"""
 ### [{f.severity.upper()}] {f.title}
 - **Category:** {f.category}
@@ -246,7 +249,7 @@ Estimated Time Complexity: **{analysis.time_complexity}** | Space Complexity: **
 **Explanation:**  
 {f.explanation}
 
-{f'**Remediation Suggestion:**\\n{f.suggestion}' if f.suggestion else ''}
+{suggestion_section}
 """
 
     if analysis.generated_tests:
