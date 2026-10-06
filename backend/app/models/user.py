@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import TYPE_CHECKING, List
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -13,6 +13,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database.session import Base
+
+if TYPE_CHECKING:
+    from .analysis import Analysis
+    from .audit import AuditEvent
 
 
 def get_utc_now() -> datetime:

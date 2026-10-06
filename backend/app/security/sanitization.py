@@ -1,6 +1,5 @@
 """Input sanitization, boundary defense, and prompt injection defense utilities."""
 
-import re
 from typing import Tuple
 
 

@@ -3,7 +3,6 @@
 import logging
 import re
 import sys
-from typing import Any, Dict
 
 
 # Regex patterns to redact secrets in log messages

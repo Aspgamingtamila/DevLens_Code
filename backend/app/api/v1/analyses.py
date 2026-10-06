@@ -8,9 +8,6 @@ from sqlalchemy.orm import Session, selectinload
 from ...auth.dependencies import get_current_user, get_optional_user
 from ...database.session import get_db
 from ...models.analysis import Analysis
-from ...models.finding import Finding
-from ...models.metrics import AnalysisMetric
-from ...models.generated_test import GeneratedTest
 from ...models.user import User
 from ...schemas.analysis import (
     AnalysisRequest,

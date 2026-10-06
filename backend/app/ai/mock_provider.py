@@ -2,7 +2,7 @@
 
 from typing import List
 from .base import AIProvider, AIStructuredOutput, AIFinding, AITestCase
-from ..schemas.findings import FindingSchema, SeverityEnum, CategoryEnum, SourceEnum
+from ..schemas.findings import FindingSchema, SeverityEnum, CategoryEnum
 
 
 class MockAIProvider(AIProvider):

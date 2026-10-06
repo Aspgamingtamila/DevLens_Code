@@ -1,7 +1,7 @@
 """Finding SQLAlchemy ORM Model."""
 
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from sqlalchemy import (
     CheckConstraint,
     Float,
@@ -14,6 +14,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database.session import Base
+
+if TYPE_CHECKING:
+    from .analysis import Analysis
 
 
 def generate_uuid() -> str:

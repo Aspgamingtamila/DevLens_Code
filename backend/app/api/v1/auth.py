@@ -141,7 +141,7 @@ def refresh_tokens(
 ):
     """Rotates refresh token and returns a new access token."""
     hashed = hash_token(payload.refresh_token)
-    stmt = select(RefreshToken).where(RefreshToken.token_hash == hashed, RefreshToken.revoked == False)
+    stmt = select(RefreshToken).where(RefreshToken.token_hash == hashed, RefreshToken.revoked.is_(False))
     result = db.execute(stmt)
     token_record = result.scalar_one_or_none()
 
@@ -159,7 +159,7 @@ def refresh_tokens(
     token_record.revoked = True
 
     # Retrieve user
-    user_stmt = select(User).where(User.id == token_record.user_id, User.is_active == True)
+    user_stmt = select(User).where(User.id == token_record.user_id, User.is_active.is_(True))
     user_res = db.execute(user_stmt)
     user = user_res.scalar_one_or_none()
     if not user:

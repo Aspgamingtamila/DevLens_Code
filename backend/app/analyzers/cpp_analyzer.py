@@ -223,7 +223,7 @@ class CppAnalyzer(BaseAnalyzer):
                         source=SourceEnum.STATIC,
                         title=f"Unbounded string operation via '{func}()'",
                         explanation=f"'{func}()' does not enforce destination buffer boundary checks, exposing the application to CWE-120 buffer overflow attacks.",
-                        suggestion=f"Use bounded alternatives like 'strncpy', 'strncat', or 'snprintf' (or std::string in C++).",
+                        suggestion="Use bounded alternatives like 'strncpy', 'strncat', or 'snprintf' (or std::string in C++).",
                         line_start=idx,
                         line_end=idx,
                         rule_id="CPP-SEC-002",

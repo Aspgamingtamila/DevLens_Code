@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-from ..schemas.findings import FindingSchema, SeverityEnum, CategoryEnum, SourceEnum
+from ..schemas.findings import FindingSchema, SeverityEnum, CategoryEnum
 
 
 class AIFinding(BaseModel):

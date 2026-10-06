@@ -26,7 +26,7 @@ def get_optional_user(
         return None
 
     user_id = payload["sub"]
-    stmt = select(User).where(User.id == user_id, User.is_active == True)
+    stmt = select(User).where(User.id == user_id, User.is_active.is_(True))
     result = db.execute(stmt)
     user = result.scalar_one_or_none()
     return user

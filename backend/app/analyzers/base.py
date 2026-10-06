@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import List, Tuple
-from ..schemas.findings import FindingSchema, SeverityEnum, CategoryEnum, SourceEnum
+from ..schemas.findings import FindingSchema
 from ..schemas.metrics import AnalysisMetricSchema
 
 

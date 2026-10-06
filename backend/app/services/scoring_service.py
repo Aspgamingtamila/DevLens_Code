@@ -4,7 +4,7 @@ Computes a transparent, 6-pillar advisory quality score (0 - 100).
 """
 
 from typing import Tuple
-from ..schemas.metrics import AnalysisMetricSchema, QualityScoreSchema
+from ..schemas.metrics import AnalysisMetricSchema
 
 
 def calculate_dqe_score(metrics: AnalysisMetricSchema) -> Tuple[float, str]:
